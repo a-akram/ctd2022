@@ -1,6 +1,6 @@
 # Input/output configuration
-input_dir: ${EXATRKX_DATA}/run/feature_store
-output_dir: ${EXATRKX_DATA}/run/gnn_evaluation
+input_dir: ${SCRATCH}/run/feature_store
+output_dir: ${SCRATCH}/run/gnn_evaluation
 project: GNNStudy
 edge_cut: 0.5
 
