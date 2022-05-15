@@ -6,8 +6,8 @@
 
 #SBATCH -A m3443_g                   # --account=<account>, account name. cpu: m3443, gpu: m3443_g
 #SBATCH -J ctd                       # --job-name=<jobname>, job name
-#-SBATCH -N 1                         # --nodes=<minnodes>[-maxnodes], absent: resource satisfy -n, -c, -G
-#-SBATCH -G 1                        # --gpus=[type:]<number>, gpus required for this job
+#SBATCH -N 1                         # --nodes=<minnodes>[-maxnodes], absent: resource satisfy -n, -c, -G
+#SBATCH -G 1                         # --gpus=[type:]<number>, gpus required for this job
 #SBATCH -C gpu                       # --constraint=<list>, assign "slurm feature(s)" 
 #SBATCH -q regular                   # --qos=<qos>, request quality of service
 #SBATCH -t 4:00:00                   # --time=<time>, request job time
