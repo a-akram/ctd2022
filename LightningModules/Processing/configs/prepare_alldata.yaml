@@ -1,14 +1,21 @@
-# Input/output configuration
+# I/O Configuration
 input_dir: ${EXATRKX_DATA}/train_all
-output_dir: ${EXATRKX_DATA}/feature_store/all_data
-detector_path: ${EXATRKX_DATA}/detectors.csv
-n_files: 9000
+output_dir: ${SCRATCH}/run/feature_store
+
+n_files: 100000
 n_workers: 32
 n_tasks: 1
-overwrite: True
+overwrite: False
 
-endcaps: True
 noise: True
-layerwise: False
-modulewise: True
-cell_information: True
+skewed: False
+layerwise: True             # True Edge List
+modulewise: True            # True Edge List
+inputedges: True            # Input Edge List
+
+# if inputedges=True:
+# then 'edge_index' will be built in the Processing stage, so one can use GNN stage right after that i.e. skipping Embedding & Filtering
+
+# if inputedges=False:
+# ithen 'edge_index' will be skipped in the Processing stage. Which means one should either build `edge_index` explicitly or may go through
+# the Embedding and/or filtering stages. To use GNN stage, one needs in input data containing `edge_index` variable which is input to GNN.
