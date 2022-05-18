@@ -3,9 +3,10 @@ input_dir: ${EXATRKX_DATA}/train_all
 output_dir: ${SCRATCH}/run/feature_store
 
 n_files: 100000
-n_workers: 32
+n_workers: 64
 n_tasks: 1
 overwrite: False
+chunksize: 10
 
 noise: True
 skewed: False
