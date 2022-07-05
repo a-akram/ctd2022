@@ -2,8 +2,8 @@
 
 # This script runs 'plot_trk_perf.py'
 
-infile="run/trkx_reco_eval/complex/particles.h5"
-outputdir="run/trkx_reco_eval/complex"
+infile="run/trkx_reco_eval/all/particles.h5"
+outputdir="run/trkx_reco_eval/all"
 prefix="trk_perf"
 
 # reco tracks from GNN

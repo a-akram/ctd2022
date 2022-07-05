@@ -1,11 +1,11 @@
-name: exatrkx
+name: exatrkx-hsf
 
 channels:
+    - defaults
     - pytorch
     - pyg
-    - defaults
     - conda-forge
-
+    
 dependencies:
     - pip
     - numpy

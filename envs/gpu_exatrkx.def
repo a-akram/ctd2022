@@ -28,14 +28,14 @@ From: continuumio/miniconda3
 
     # *** Setting Up Envrionmnet
     conda env create -f gpu_environment.yml python=3.8
-    conda activate exatrkx
+    conda activate exatrkx-hsf
     pip install -e .
 
     # *** Setup Custom File for Conda Environment, Then Put in BASH_ENV ***
     mv ~/.bashrc ~/.bashrcold
     conda init
     cat ~/.bashrc >> /etc/conda.init
-    echo "conda activate exatrkx" >> /etc/conda.init
+    echo "conda activate exatrkx-hsf" >> /etc/conda.init
     conda clean -t
     mv ~/.bashrcold ~/.bashrc
 

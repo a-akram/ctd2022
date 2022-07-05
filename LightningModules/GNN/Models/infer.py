@@ -55,18 +55,11 @@ class GNNMetrics(Callback):
         # Output Directory
         output_dir = pl_module.hparams.output_dir
         os.makedirs(output_dir, exist_ok=True)
-        
-        print("preds: ", len(self.preds))
-        print("truth: ", len(self.truth))
-        
+                
         # Aggregate 'truth' and 'pred' from all batches.
-        truth = torch.cat(self.truth)
         preds = torch.cat(self.preds)
-        
-        print("preds: ", preds.shape)
-        print("truth: ", truth.shape)
-        
-        # print(preds.shape, truth.shape)
+        truth = torch.cat(self.truth)
+        print("preds: {}, truth: {}".format(preds.shape, truth.shape))
 
         # ----- ROC Metric
         # fpr, tpr, threshold = roc_curve(truth, preds)
@@ -170,10 +163,9 @@ class GNNMetrics_V2(Callback):
         os.makedirs(output_dir, exist_ok=True)
         
         # Aggregate 'truth' and 'pred' from all batches.
-        preds = np.concatenate(self.preds)
-        truth = np.concatenate(self.truth)
-        print(preds.shape, truth.shape)
-        
+        preds = torch.cat(self.preds)
+        truth = torch.cat(self.truth)
+        print("preds: {}, truth: {}".format(preds.shape, truth.shape))
         
         # ----- ROC Metric
         # fpr, tpr, threshold = roc_curve(truth, preds)
@@ -185,7 +177,7 @@ class GNNMetrics_V2(Callback):
                                   y_val=roc_tpr, 
                                   x_lab="FPR",
                                   y_lab="TPR", 
-                                  title="ROC Curve, AUC = %.3f" % roc_auc,
+                                  title="ROC Curve, AUC = %.5f" % roc_auc,
                                   loc='lower right'
                                   )
         # Plotting: ROC
@@ -206,7 +198,7 @@ class GNNMetrics_V2(Callback):
                                   y_val=pre, 
                                   x_lab="Recall",  # TPR
                                   y_lab="Precision",  # PPV
-                                  title="PR Curve, AUC = %.3f" % prc_auc,
+                                  title="PR Curve, AUC = %.5f" % prc_auc,
                                   loc='lower left'
                                   )
         
@@ -227,13 +219,13 @@ class GNNMetrics_V2(Callback):
                                   y_val=pur, 
                                   x_lab="Efficiency",  # TPR
                                   y_lab="Purity",  # TNR = 1 - FPR
-                                  title="EP Curve, AUC = %.3f" % eff_pur_auc,
+                                  title="EP Curve, AUC = %.5f" % eff_pur_auc,
                                   loc='lower left'
                                   )
         
         axs[0].plot([0, 1], [1, 0], color="navy", linestyle="--")
         plt.tight_layout()
-        fig.savefig(os.path.join(output_dir, "eff_pur_curve.png"), format="png")
+        fig.savefig(os.path.join(output_dir, "epc_curve.png"), format="png")
 
     def make_plot(self, x_val, y_val, x_lab, y_lab, title, loc):
         """common function for creating plots"""
@@ -243,24 +235,23 @@ class GNNMetrics_V2(Callback):
         axs = axs.flatten() if type(axs) is list else [axs]
         
         # plotting: data
-        axs[0].plot(x_val, y_val, color="darkorange")
+        axs[0].plot(x_val, y_val, color="darkorange", label=title)
         
         # plotting: params
         axs[0].set_xlabel(x_lab, fontsize=20)
         axs[0].set_ylabel(y_lab, fontsize=20)
-        axs[0].set_xlim(-0.1, 1)
-        axs[0].set_ylim(-0.1, 1)
+        axs[0].set_xlim(-0.04, 1.04)
+        axs[0].set_ylim(-0.04, 1.04)
         axs[0].set_title(title)
         axs[0].legend(loc=loc)
         return fig, axs
+
 
 # GNNTelemetry Callback
 # from Common_Tracking_Example/.../GNN/Models/inference.py
 class GNNTelemetry(Callback):
 
-    """
-    This callback contains standardised tests of the performance of a GNN
-    """
+    """This callback contains standardised tests of the performance of a GNN"""
 
     def __init__(self):
         super().__init__()
@@ -269,8 +260,8 @@ class GNNTelemetry(Callback):
 
     def on_test_start(self, trainer, pl_module):
 
-        """This hook is automatically called when the model is tested after
-        training. The best checkpoint is automatically loaded"""
+        """This hook is automatically called when the model is tested 
+        after training. The best checkpoint is automatically loaded"""
 
         self.preds = []
         self.truth = []
@@ -279,9 +270,7 @@ class GNNTelemetry(Callback):
         self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
     ):
 
-        """
-        Get the relevant outputs from each batch
-        """
+        """Get the relevant outputs from each batch"""
 
         self.preds.append(outputs["preds"])
         self.truth.append(outputs["truth"])
@@ -300,25 +289,76 @@ class GNNTelemetry(Callback):
         # Output Directory
         output_dir = pl_module.hparams.output_dir
         os.makedirs(output_dir, exist_ok=True)
-        
-        # Aggregate 'truth' and 'pred' from all batches.
-        preds = np.concatenate(self.preds)
-        truth = np.concatenate(self.truth)
-        print(preds.shape, truth.shape)
 
+        # Aggregate 'truth' and 'pred' from all batches.
+        preds = torch.cat(self.preds)
+        truth = torch.cat(self.truth)
+        print("preds: {}, truth: {}".format(preds.shape, truth.shape))
+
+
+        # ------------------------ ROC Curve: FPR vs TPR
         roc_fpr, roc_tpr, roc_thresholds = roc_curve(truth, preds)
         roc_auc = auc(roc_fpr, roc_tpr)
         logging.info("ROC AUC: %s", roc_auc)
 
-        # Update this to dynamically adapt to number of metrics
-        fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(20, 20))
+        # Plotting
+        fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(10,10))
         axs = axs.flatten() if type(axs) is list else [axs]
 
-        axs[0].plot(roc_fpr, roc_tpr, color="darkorange", label="ROC Curve, AUC = %.3f" % roc_auc)
-        axs[0].plot([0, 1], [0, 1], "--")
-        axs[0].set_xlabel("False Positive Rate")
-        axs[0].set_ylabel("True Positive Rate")
-        axs[0].set_title("ROC Curve, AUC = %.3f" % roc_auc)
+        axs[0].plot(roc_fpr, roc_tpr, color="darkorange", label="ROC Curve, AUC = %.5f" % roc_auc)
+        axs[0].plot([0, 1], [0, 1], color="navy", linestyle="--")
+        axs[0].set_xlabel("FPR", fontsize=20)
+        axs[0].set_ylabel("TPR", fontsize=20)
+        # axs[0].set_title("ROC Curve, AUC = %.5f" % roc_auc)
+        axs[0].legend(loc='lower right', fontsize=16)
         plt.tight_layout()
-                
-        fig.savefig(os.path.join(output_dir, "metrics_roc.png"), format="png")
+        fig.savefig(os.path.join(output_dir, "curve_roc.pdf"), format="pdf")
+
+
+        # ------------------------ ROC Curve: Efficiency vs Purity
+        eff = roc_tpr
+        pur = 1 - roc_fpr
+        score_cuts = roc_thresholds
+        
+        eff, pur, score_cuts = (
+            eff[score_cuts <= 1],
+            pur[score_cuts <= 1],
+            score_cuts[score_cuts <= 1],
+        )  # Make sure this is nicely plottable!
+        
+        epc_auc = auc(eff, pur)
+        logging.info("EPC AUC: %s", epc_auc)
+        
+        
+        # Plotting
+        fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(10, 10))
+        axs = axs.flatten() if type(axs) is list else [axs]
+
+        axs[0].plot(eff, pur, color="darkorange", label="EP Curve, AUC = %.5f" % epc_auc)
+        axs[0].plot([0, 1], [1, 0], color="navy", linestyle="--")
+        axs[0].set_xlabel("Edge Efficiency", fontsize=20)
+        axs[0].set_ylabel("Edge Purity", fontsize=20)
+        # axs[0].set_title("EP Curve, AUC = %.5f" % epc_auc)
+        axs[0].legend(loc='lower left', fontsize=16)
+        plt.tight_layout()
+        fig.savefig(os.path.join(output_dir, "curve_epc.pdf"), format="pdf")
+
+
+        # ------------------------ EP vs Score Cuts 
+        # Plotting
+        fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(10, 10))
+        axs = axs.flatten() if type(axs) is list else [axs]
+        #axs2 = axs[0].twinx()
+
+        axs[0].plot(score_cuts, pur, color="darkblue", label="Edge Purity")
+        axs[0].plot(score_cuts, eff, color="darkorange", label="Edge Efficiency")
+        axs[0].set_xlabel("Edge Score Cut", fontsize=20)
+        
+        # axs[0].set_ylabel("Purity", fontsize=20)
+        axs[0].set_ylim(0.5,1.02)
+        
+        # axs2.set_ylabel("Efficiency", fontsize=20)
+        
+        axs[0].legend(loc='lower center', fontsize=16)
+        plt.tight_layout()
+        fig.savefig(os.path.join(output_dir, "curve_epc_cut.pdf"), format="pdf")

@@ -1,15 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# System imports
 import os
-from functools import partial
-
-# 3rd party imports
 import numpy as np
+from functools import partial
 from tqdm.contrib.concurrent import process_map
 
-# Local imports
 from ..feature_store_base import FeatureStoreBase
 from ..utils.event_utils import prepare_event
 # from ..utils.detector_utils import load_detector
@@ -31,8 +27,8 @@ class TrackMLFeatureStore(FeatureStoreBase):
         # Split the input files by number of tasks and select my chunk only
         all_events = np.array_split(all_events, self.n_tasks)[self.task]
         
-        # NOTE: I have remove cell_features and detector path (Adeel)
-        # TODO: reomve or make such a info for STT as well.
+        # ADAK: I have remove cell_features and detector path (Adeel)
+        # TODO: Reomve or make such a info for STT as well.
         # --- Define the cell features to be added to the dataset
         # --- cell_features = ["cell_count", "cell_val", "leta", "lphi", "lx", "ly", "lz", "geta", "gphi"]
         # --- detector_orig, detector_proc = load_detector(self.detector_path)

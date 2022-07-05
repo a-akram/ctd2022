@@ -14,13 +14,14 @@ import os
 import logging
 import itertools
 
-import scipy as sp
 import numpy as np
 import pandas as pd
 import trackml.dataset
 
 import torch
 from torch_geometric.data import Data
+
+from .graph_utils import get_input_edges, graph_intersection
 
 # Device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -138,109 +139,7 @@ def get_modulewise_edges(hits):
     return true_edges
 
 
-# ADAK 1: Processing to GNN
-def select_edges(hits1, hits2, filtering=True):
-    """Select edges using a particular phi range or sectors. Currently, I am selecting edges 
-    only in the neighboring sectors i.e. hit1 is paired with hit2 in immediate sectors only."""
-    
-    # Start with all possible pairs of hits, sector_id is for sectorwise selection
-    keys = ['event_id', 'r', 'phi', 'isochrone', 'sector_id']
-    hit_pairs = hits1[keys].reset_index().merge(hits2[keys].reset_index(), on='event_id', suffixes=('_1', '_2'))
-    
-    if filtering:
-        dSector = (hit_pairs['sector_id_1'] - hit_pairs['sector_id_2'])
-        sector_mask = ((dSector.abs() < 2) | (dSector.abs() == 5))
-        edges = hit_pairs[['index_1', 'index_2']][sector_mask]
-    else:
-        edges = hit_pairs[['index_1', 'index_2']]
-        
-    return edges
-
-
-# ADAK 2: Processing to GNN
-def construct_edges(hits, layer_pairs, filtering=True):
-    """Construct edges between hit pairs in adjacent layers"""
-
-    # Loop over layer pairs and construct edges
-    layer_groups = hits.groupby('layer')
-    edges = []
-    for (layer1, layer2) in layer_pairs:
-        
-        # Find and join all hit pairs
-        try:
-            hits1 = layer_groups.get_group(layer1)
-            hits2 = layer_groups.get_group(layer2)
-        # If an event has no hits on a layer, we get a KeyError.
-        # In that case we just skip to the next layer pair
-        except KeyError as e:
-            logging.info('skipping empty layer: %s' % e)
-            continue
-        
-        # Construct the edges
-        edges.append(select_edges(hits1, hits2, filtering))
-    
-    # Combine edges from all layer pairs
-    edges = pd.concat(edges)
-    return edges
-
-
-# ADAK 3: Processing to GNN
-def get_input_edges(hits, filtering=True):
-    """Build edge_index list for GNN stage."""
-    n_layers = hits.layer.unique().shape[0]
-    layers = np.arange(n_layers)
-    layer_pairs = np.stack([layers[:-1], layers[1:]], axis=1)
-    edges = construct_edges(hits, layer_pairs, filtering)
-    edge_index = edges.to_numpy().T
-    return edge_index
-
-
-# ADAK 4: Processing to GNN
-def graph_intersection(pred_graph, truth_graph):
-    """Get truth information about edge_index (function is from both Embedding/Filtering)"""
-    
-    array_size = max(pred_graph.max().item(), truth_graph.max().item()) + 1
-    
-    if torch.is_tensor(pred_graph):
-        l1 = pred_graph.cpu().numpy()
-    else:
-        l1 = pred_graph
-        
-    if torch.is_tensor(truth_graph):
-        l2 = truth_graph.cpu().numpy()
-    else:
-        l2 = truth_graph
-        
-    e_1 = sp.sparse.coo_matrix(
-        (np.ones(l1.shape[1]), l1), shape=(array_size, array_size)
-    ).tocsr()
-
-    e_2 = sp.sparse.coo_matrix(
-        (np.ones(l2.shape[1]), l2), shape=(array_size, array_size)
-    ).tocsr()
-    
-    del l1
-    del l2
-    
-    e_intersection = (e_1.multiply(e_2) - ((e_1 - e_2) > 0)).tocoo()
-    
-    del e_1
-    del e_2
-    
-    new_pred_graph = (
-        torch.from_numpy(np.vstack([e_intersection.row, e_intersection.col]))
-        .long()
-        .to(device)
-    )
-    
-    y = torch.from_numpy(e_intersection.data > 0).to(device)
-    
-    del e_intersection
-    
-    return new_pred_graph, y
-
-
-def select_hits(event_file=None, noise=False, skewed=False):
+def select_hits(event_file=None, noise=False, min_pt=None, skewed=False):
     """Hit selection method from Exa.TrkX. Build a full event, select hits based on certain criteria."""
     
     # load data using event_prefix (e.g. path/to/event0000000001)
@@ -261,6 +160,10 @@ def select_hits(event_file=None, noise=False, skewed=False):
     # assign pt (from tpx & tpy, why not px & py ???) and add to truth
     truth = truth.assign(pt=np.sqrt(truth.tpx**2 + truth.tpy**2))
     
+    # apply min_pt on truth data frame
+    if min_pt is not None:
+        truth = truth[truth.pt > min_pt]
+    
     # merge some columns of tubes to the hits, I need isochrone, skewed & sector_id
     hits = hits.merge(tubes[["hit_id", "isochrone", "skewed", "sector_id"]], on="hit_id")
 
@@ -277,8 +180,8 @@ def select_hits(event_file=None, noise=False, skewed=False):
         hits = pd.concat([vlid_groups.get_group(vlids[i]).assign(layer=i) for i in range(n_det_layers)])
     
     else:
-        # FIXME: this is conveniet to use layer as a column for both skewed=True or False
-        # second way is to drop layer_id from hits, and rename layer to layer_id.
+        # FIXME: This is conveniet to use layer as a column for both skewed=True or False.
+        # The second way is to drop layer_id from hits, and rename layer to layer_id.
         hits = hits.rename(columns={"layer_id": "layer"})
 
     # Calculate derived hits variables
@@ -294,23 +197,34 @@ def select_hits(event_file=None, noise=False, skewed=False):
     return hits
     
     
-def build_event(event_file, feature_scale, layerwise=True, modulewise=True,
-                inputedges=False, noise=False, skewed=False):
-    """
-    Get true edge list using the ordering by R' = distance from production vertex of each particle.
-    Return: [X=(r, phi, z), particle_id, layers, layerless_true_edges, layerwise_true_edges, hit_id]
-    """
+def build_event(event_file,
+                feature_scale,
+                modulewise=True,
+                layerwise=True,
+                noise=False,
+                min_pt=None,
+                # detector=None,
+                inputedges=False,
+                skewed=False):
     
-    # Load event using "event_file" prefix.
-    # hits, tubes, particles, truth = trackml.dataset.load_event(event_file)
-    
-    # Select hits, add new/select columns, add event_id
-    hits = select_hits(event_file=event_file, noise=noise, skewed=skewed).assign(
+    # Get true edge list using the ordering by R' = distance from production vertex of each particle
+    hits = select_hits(event_file=event_file, noise=noise, min_pt=min_pt, skewed=skewed).assign(
         event_id=int(event_file[-10:])
     )
     
+    # Make a unique module ID and attach to hits
+    # TODO: Get module_id's for STT
+    
+    # if detector is not None:
+    #    module_lookup = detector.reset_index()[["index", "volume_id", "layer_id", "module_id"]]
+    #                                           .rename(columns={"index": "module_index"})
+    #    hits = hits.merge(module_lookup, on=["volume_id", "layer_id", "module_id"], how="left")
+    #    module_id = hits.module_index.to_numpy()
+    # else:
+    #    module_id = None
+        
     # Get list of all layers
-    layers = hits.layer.to_numpy()
+    layer_id = hits.layer.to_numpy()
 
     # Handle which truth graph(s) are being produced
     modulewise_true_edges, layerwise_true_edges = None, None
@@ -361,24 +275,26 @@ def build_event(event_file, feature_scale, layerwise=True, modulewise=True,
     return (
         hits[["r", "phi", "isochrone"]].to_numpy() / feature_scale,
         hits.particle_id.to_numpy(),
-        layers,
-        layerwise_true_edges,
+        layer_id,
+        # module_id,
         modulewise_true_edges,
+        layerwise_true_edges,
         layerwise_input_edges,
         hits["hit_id"].to_numpy(),
         hits.pt.to_numpy(),
         # edge_weight_norm,
-    )
- 
-    
+    )    
+
+
 def prepare_event(
     event_file,
     progressbar=None,
     output_dir=None,
     modulewise=True,
     layerwise=True,
-    inputedges=True,
     noise=False,
+    min_pt=None,
+    inputedges=True,
     skewed=False,
     overwrite=False,
     **kwargs
@@ -399,9 +315,10 @@ def prepare_event(
             (
                 X,
                 pid,
-                layers,
-                layerwise_true_edges,
+                layer_id,
+                # module_id,
                 modulewise_true_edges,
+                layerwise_true_edges,
                 layerwise_input_edges,
                 hid,
                 pt,
@@ -409,10 +326,11 @@ def prepare_event(
             ) = build_event(
                 event_file,
                 feature_scale,
-                layerwise=layerwise,
                 modulewise=modulewise,
-                inputedges=inputedges,
+                layerwise=layerwise,
                 noise=noise,
+                min_pt=min_pt, 
+                inputedges=inputedges,
                 skewed=skewed
             )
             
@@ -420,7 +338,8 @@ def prepare_event(
             data = Data(
                 x=torch.from_numpy(X).float(),
                 pid=torch.from_numpy(pid),
-                layers=torch.from_numpy(layers),
+                # modules=torch.from_numpy(module_id),
+                layers=torch.from_numpy(layer_id),
                 event_file=event_file,
                 hid=torch.from_numpy(hid),
                 pt=torch.from_numpy(pt),
@@ -435,31 +354,31 @@ def prepare_event(
                 data.layerwise_true_edges = torch.from_numpy(layerwise_true_edges)
             
             # NOTE: I am jumping from Processing to GNN stage, so I need ground truth (GT) of input
-            # edges (edge_index). After embedding, one gets GT as y, and after filtering one gets 
+            # edges (edge_index). After Embedding, one gets GT as 'y', and after Filtering one gets 
             # the GT in the form of 'y_pid'. As I intend to skip both the Embedding & the Filtering
             # stages, the input graph and its GT is build in Processing stage. The GNN can run after
-            # either embedding or filtering stages so it look for either 'y' or 'y_pid', existance of
-            # one of these means the execution of these stages i.e. if y_pid exists in data that means
-            # both embedding and filtering stages has been executed. If only 'y' exists then only 
+            # either Embedding or Filtering stages, so it looks for either 'y' or 'y_pid', existance of
+            # one of these means the execution of these stages i.e. if 'y_pid' exists in data that means
+            # both Embedding and Filtering stages has been executed. If only 'y' exists then only 
             # embedding stage has been executed. In principle, I should have only one of these in Data.
             
             # Now, for my case, I will build input graph duing Processing and also add its GT to the
             # data. If the 'edge_index' is build in Processing then ground truth (y or y_pid) should 
-            # also be built here. The dimension of y (n) and y_pid (m) are given below, here m < n.
+            # also be built here. The dimension of 'y(n)' and 'y_pid(m)' are given below, here m < n.
             
-            # y (n): appears after embedding stage along with e_radius (2,n), y.shape==e_radius.shape[1]
-            # y_pid (m): appears after filtering stage along with e_radius (2,m), y_pid.shape==e_radius.shape[1]
-            
+            # y(n): appears after Embedding stage along with e_radius(2,n), y.shape==e_radius.shape[1]
+            # y_pid(m): appears after Filtering stage along with e_radius(2,m), y_pid.shape==e_radius.shape[1]
+
             if layerwise_input_edges is not None:
                 input_edges = torch.from_numpy(layerwise_input_edges)
                 new_input_graph, y = graph_intersection(input_edges, data.layerwise_true_edges)
                 data.edge_index = new_input_graph
                 # data.y = y     # if regime: [] will point to embedding
-                data.y_pid = y  # if regime: [[pid]] points to filtering
+                data.y_pid = y   # if regime: [[pid]] points to filtering
 
             # TODO: add cell/tube information to Data, Check for STT
-            # logging.info("Getting cell info")
             
+            # logging.info("Getting cell info")
             # if cell_information:
             #    data = get_cell_information(
             #        data, cell_features, detector_orig, detector_proc, endcaps, noise

@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# Base class for processing raw data into useful graphs and store them into 
-# a specific directory defined in the prepare_quickstart.yaml. See param details.
 import os
-
 from pytorch_lightning import LightningDataModule
 
 
@@ -16,7 +13,9 @@ class FeatureStoreBase(LightningDataModule):
         self.input_dir = self.hparams["input_dir"]
         self.output_dir = self.hparams["output_dir"]
         self.n_files = self.hparams["n_files"]
+        
         self.skewed = self.hparams["skewed"]
+        
         self.n_tasks = self.hparams["n_tasks"]
         self.task = 0 if "task" not in self.hparams else self.hparams["task"]
         self.n_workers = (

@@ -6,6 +6,11 @@
 # Max Events
 maxevts=5000
 
+if test "$1" != ""; then
+  maxevts=$1
+fi
+
+
 # Data Directories
 gnn_pred="run/gnn_evaluation/test"
 reco_tracks="run/trkx_from_gnn"

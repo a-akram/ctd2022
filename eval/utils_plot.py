@@ -35,7 +35,7 @@ eta_configs = {
 
 
 # get a plot
-def get_plot(nrows=1, ncols=1, figsize=6, nominor=False):
+def get_plot(nrows=1, ncols=1, figsize=8, nominor=False):
 
     fig, axs = plt.subplots(nrows, ncols,
                             figsize=(figsize*ncols, figsize*nrows),
@@ -106,7 +106,7 @@ def make_cmp_plot(arrays, legends, configs,
     ax.set_xlabel(xlabel, fontsize=fontsize)
     ax.set_ylabel(ylabel, fontsize=fontsize)
     add_up_xaxis(ax)
-    ax.legend()
+    ax.legend(loc='upper right', fontsize=12)
     ax.grid(False)
     fig.savefig("{}.png".format(outname))
 
@@ -121,13 +121,13 @@ def make_cmp_plot(arrays, legends, configs,
         ax.errorbar(xvals, ratio, yerr=ratio_err, fmt='o',
                     xerr=xerrs, lw=2, label=label)
 
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ratio_label)
+    ax.set_xlabel(xlabel, fontsize=fontsize)
+    ax.set_ylabel(ratio_label, fontsize=fontsize)
     ax.set_ylim([0., 1.])
     add_up_xaxis(ax)
 
     if ratio_legends is not None:
-        ax.legend(loc='lower right')
+        ax.legend(loc='lower right', fontsize=12)
 
     ax.grid(False)
     fig.savefig("{}_ratio.png".format(outname))

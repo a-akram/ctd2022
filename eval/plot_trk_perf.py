@@ -59,6 +59,6 @@ if __name__ == "__main__":
         # make pT plots
         make_cmp_plot_fn([gen_pt, true_pt, reco_pt],
                          configs=pt_configs,
-                         xlabel=r"$p_t$ [GeV/c]",
+                         xlabel=r"$p_t$ [GeV]",
                          outname=os.path.join(outdir, "{}_pt_cut{}".format(out_prefix, cut_pt)),
                          ymin=0.6)

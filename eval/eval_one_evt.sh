@@ -1,17 +1,22 @@
 #!/bin/bash
 
-# Combined run of trkx_from_gnn.py (trkx_from_gnn.sh)
-# and eval_reco_trkx.py (eval_reco_trkx.sh) scripts.
+# evaluate an event for particular epsilon.
 
+if [ $# -lt 1 ]; then
+  echo -e "First Argument is Needed.\n"
+  echo -e "USAGE: ./eval.sh <event_id> <epsilon_cut> <max_events>"
+  exit 1
+fi
 
 # params
-maxevts=5000
+evtid=1
+maxevts=100
 epsilon=0.25
 edge_score_cut=0.0
 
 # input
 if test "$1" != ""; then
-  maxevts=$1
+  evtid=$1
 fi
 
 if test "$2" != ""; then
@@ -19,9 +24,11 @@ if test "$2" != ""; then
 fi
 
 if test "$3" != ""; then
-  edge_score_cut=$3
+  maxevts=$3
 fi
 
+
+echo "Running Track Building with Max Events: {$maxevts} and Epsilon: {$epsilon}"
 
 # Data Directories
 inputdir="run/gnn_evaluation/test"
@@ -40,19 +47,23 @@ python trkx_from_gnn.py \
     --min-samples 2
 
 
+echo "Running Evaluation for Event $evtid\n"
+
+
+
 # Data Directories
-eval_trkx_dir="run/trkx_reco_eval/eval"
-mkdir -p $eval_trkx_dir
+eval_trkx_dir="run/trkx_reco_eval/$1"
 
 # Evaluate Reco. Tracks
 python eval_reco_trkx.py \
     --reco-tracks-path $reco_trkx_dir \
     --raw-tracks-path $inputdir \
     --outname $eval_trkx_dir \
-    --max-evts $maxevts \
+    --event-id $evtid \
     --force \
     --min-hits-truth 7 \
     --min-hits-reco 4 \
     --min-pt 0. \
     --frac-reco-matched 0.5 \
     --frac-truth-matched 0.5
+
